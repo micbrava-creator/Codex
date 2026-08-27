@@ -9,6 +9,10 @@ CRM leve para organizar contatos em várias listas e receber leads do Great Page
 - Importação de até 500 contatos por arquivo CSV, com prévia e deduplicação por e-mail
 - Exportação de todos os contatos da lista em CSV compatível com Excel/Google Sheets
 - Modelo de CSV disponível diretamente na tela de importação
+- Funis de vendas vinculados às listas, com entrada automática na primeira etapa
+- Kanban com movimentação de cartões por arrastar e soltar
+- Criação, edição e exclusão de funis e etapas
+- Edição completa do cartão do lead e tarefas com prazo e conclusão
 - URL de webhook exclusiva e copiável para cada lista
 - Recebimento de JSON ou formulário (`application/x-www-form-urlencoded` / `multipart/form-data`)
 - Compatibilidade com campos em português e inglês: `nome`/`name`, `email`, `telefone`/`phone`, `whatsapp`, `empresa`/`company`
