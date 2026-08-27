@@ -1,72 +1,9 @@
-'use client';
+import CrmClient from './crm-client';
+import { requireChatGPTUser } from './chatgpt-auth';
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+export const dynamic = 'force-dynamic';
 
-type ContactList = { id: string; name: string; segment: string; color: string; webhookToken: string; contactCount: number };
-type Contact = { id: string; listId: string; name: string; email: string; phone: string; company: string; notes: string; source: string; createdAt: string };
-const emptyContact = { name: '', email: '', phone: '', company: '', notes: '' };
-const colors = ['#5B5BD6', '#F26B4A', '#2F9C75', '#D99A2B', '#A455C2'];
-
-export default function Home() {
-  const [lists, setLists] = useState<ContactList[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [selectedId, setSelectedId] = useState('');
-  const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [notice, setNotice] = useState('');
-  const [listModal, setListModal] = useState(false);
-  const [contactModal, setContactModal] = useState(false);
-  const [editingContact, setEditingContact] = useState<Contact | null>(null);
-  const [listForm, setListForm] = useState({ name: '', segment: '', color: colors[0] });
-  const [contactForm, setContactForm] = useState(emptyContact);
-  const selected = lists.find((list) => list.id === selectedId) ?? lists[0];
-
-  const loadLists = useCallback(async () => {
-    const response = await fetch('/api/lists'); const data = (await response.json()) as ContactList[];
-    setLists(data); setSelectedId((current) => current || data[0]?.id || ''); setLoading(false);
-  }, []);
-  const loadContacts = useCallback(async (listId: string) => {
-    if (!listId) return setContacts([]);
-    const response = await fetch(`/api/contacts?listId=${encodeURIComponent(listId)}`); setContacts((await response.json()) as Contact[]);
-  }, []);
-  useEffect(() => { loadLists().catch(() => setLoading(false)); }, [loadLists]);
-  useEffect(() => { if (selected?.id) loadContacts(selected.id); }, [selected?.id, loadContacts]);
-  const filtered = useMemo(() => { const term = search.trim().toLowerCase(); return term ? contacts.filter((contact) => [contact.name, contact.email, contact.phone, contact.company].some((value) => value.toLowerCase().includes(term))) : contacts; }, [contacts, search]);
-  function flash(message: string) { setNotice(message); window.setTimeout(() => setNotice(''), 2800); }
-
-  async function saveList(event: FormEvent) {
-    event.preventDefault(); const response = await fetch('/api/lists', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(listForm) });
-    if (!response.ok) return flash('Não foi possível criar a lista.');
-    const created = (await response.json()) as ContactList; setListModal(false); setListForm({ name: '', segment: '', color: colors[(lists.length + 1) % colors.length] }); await loadLists(); setSelectedId(created.id); flash('Lista criada com sucesso.');
-  }
-  async function renameList() {
-    if (!selected) return; const name = window.prompt('Novo nome da lista', selected.name)?.trim(); if (!name) return;
-    await fetch(`/api/lists/${selected.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) }); await loadLists(); flash('Lista atualizada.');
-  }
-  async function deleteList() {
-    if (!selected || !window.confirm(`Excluir “${selected.name}” e todos os seus contatos?`)) return;
-    await fetch(`/api/lists/${selected.id}`, { method: 'DELETE' }); setSelectedId(''); await loadLists(); flash('Lista excluída.');
-  }
-  function openContact(contact?: Contact) { setEditingContact(contact ?? null); setContactForm(contact ? { name: contact.name, email: contact.email, phone: contact.phone, company: contact.company, notes: contact.notes } : emptyContact); setContactModal(true); }
-  async function saveContact(event: FormEvent) {
-    event.preventDefault(); if (!selected) return;
-    const response = await fetch(editingContact ? `/api/contacts/${editingContact.id}` : '/api/contacts', { method: editingContact ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...contactForm, listId: selected.id }) });
-    if (!response.ok) return flash('Confira os dados e tente novamente.');
-    setContactModal(false); await Promise.all([loadContacts(selected.id), loadLists()]); flash(editingContact ? 'Contato atualizado.' : 'Contato adicionado.');
-  }
-  async function deleteContact(contact: Contact) { if (!window.confirm(`Excluir o contato ${contact.name || contact.email}?`)) return; await fetch(`/api/contacts/${contact.id}`, { method: 'DELETE' }); await Promise.all([loadContacts(contact.listId), loadLists()]); flash('Contato excluído.'); }
-  const webhookUrl = selected ? `${typeof window === 'undefined' ? '' : window.location.origin}/api/webhooks/${selected.webhookToken}` : '';
-
-  return <main className="app-shell">
-    <aside className="sidebar"><div className="brand"><span className="brand-mark">C</span><div><strong>Capta</strong><small>CRM de contatos</small></div></div><div className="sidebar-title"><span>SUAS LISTAS</span><button className="icon-button" onClick={() => setListModal(true)} aria-label="Criar lista">+</button></div><nav className="list-nav" aria-label="Listas de contatos">{lists.map((list) => <button key={list.id} className={list.id === selected?.id ? 'list-item active' : 'list-item'} onClick={() => setSelectedId(list.id)}><span className="list-dot" style={{ background: list.color }} /><span><strong>{list.name}</strong><small>{list.contactCount} contatos</small></span></button>)}</nav><button className="new-list" onClick={() => setListModal(true)}>+ Nova lista</button><div className="sidebar-foot"><span className="status-dot" /> Integração ativa</div></aside>
-    <section className="workspace"><header className="topbar"><div><p>LISTA DE CONTATOS</p><h1>{selected?.name ?? 'Seus contatos'}</h1></div><div className="top-actions"><button className="secondary" onClick={() => selected && navigator.clipboard.writeText(webhookUrl).then(() => flash('URL do webhook copiada.'))}>Copiar webhook</button><button className="primary" onClick={() => openContact()} disabled={!selected}>+ Adicionar contato</button></div></header>
-      <div className="content">{loading ? <div className="empty"><h2>Carregando seu CRM…</h2></div> : !selected ? <div className="empty"><span>↗</span><h2>Crie sua primeira lista</h2><p>Separe os leads por campanha, produto ou segmento.</p><button className="primary" onClick={() => setListModal(true)}>Criar lista</button></div> : <><div className="summary-row"><div><strong>{selected.contactCount}</strong><span>contatos nesta lista</span></div><div><strong>{contacts.filter((c) => c.source === 'webhook').length}</strong><span>recebidos via webhook</span></div><div className="summary-accent"><strong>{selected.segment || 'Sem segmento'}</strong><span>segmento</span></div></div>
-        <section className="integration-card"><div className="integration-icon">↗</div><div className="integration-copy"><div><span className="eyebrow">INTEGRAÇÃO GREAT PAGES</span><h2>Webhook desta lista</h2><p>Use esta URL no Great Pages. Cada novo lead entrará automaticamente em <strong>{selected.name}</strong>.</p></div><div className="webhook-box"><code>{webhookUrl}</code><button onClick={() => navigator.clipboard.writeText(webhookUrl).then(() => flash('URL copiada.'))}>Copiar</button></div></div><span className="live-badge">● Ativo</span></section>
-        <div className="toolbar"><label className="search"><span>⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nome, e-mail, telefone ou empresa" /></label><div><button className="secondary small" onClick={renameList}>Editar lista</button><button className="danger small" onClick={deleteList}>Excluir lista</button></div></div>
-        <section className="table-card"><table><thead><tr><th>CONTATO</th><th>TELEFONE</th><th>EMPRESA</th><th>ORIGEM</th><th>ENTRADA</th><th aria-label="Ações" /></tr></thead><tbody>{filtered.map((contact) => <tr key={contact.id}><td><div className="person"><span>{(contact.name || contact.email || '?').slice(0, 1).toUpperCase()}</span><div><strong>{contact.name || 'Sem nome'}</strong><small>{contact.email || 'Sem e-mail'}</small></div></div></td><td>{contact.phone || '—'}</td><td>{contact.company || '—'}</td><td><span className={contact.source === 'webhook' ? 'source webhook' : 'source manual'}>{contact.source === 'webhook' ? 'Great Pages' : 'Manual'}</span></td><td>{new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' }).format(new Date(contact.createdAt))}</td><td><div className="row-actions"><button onClick={() => openContact(contact)}>Editar</button><button onClick={() => deleteContact(contact)}>Excluir</button></div></td></tr>)}</tbody></table>{filtered.length === 0 && <div className="table-empty"><h3>Nenhum contato encontrado</h3><p>Adicione manualmente ou envie um lead pelo webhook desta lista.</p></div>}</section></>}</div>
-    </section>
-    {notice && <div className="toast" role="status">✓ {notice}</div>}
-    {listModal && <div className="modal-backdrop" onMouseDown={() => setListModal(false)}><form className="modal" onSubmit={saveList} onMouseDown={(e) => e.stopPropagation()}><div className="modal-head"><div><span className="eyebrow">NOVA CAPTAÇÃO</span><h2>Criar lista</h2></div><button type="button" onClick={() => setListModal(false)}>×</button></div><label>Nome da lista<input required autoFocus value={listForm.name} onChange={(e) => setListForm({ ...listForm, name: e.target.value })} placeholder="Ex.: Leads do e-book" /></label><label>Segmento<input value={listForm.segment} onChange={(e) => setListForm({ ...listForm, segment: e.target.value })} placeholder="Ex.: Imobiliário" /></label><fieldset><legend>Cor da lista</legend><div className="color-picker">{colors.map((color) => <button type="button" key={color} aria-label={`Cor ${color}`} className={listForm.color === color ? 'selected' : ''} style={{ background: color }} onClick={() => setListForm({ ...listForm, color })} />)}</div></fieldset><div className="modal-actions"><button type="button" className="secondary" onClick={() => setListModal(false)}>Cancelar</button><button className="primary">Criar lista</button></div></form></div>}
-    {contactModal && <div className="modal-backdrop" onMouseDown={() => setContactModal(false)}><form className="modal" onSubmit={saveContact} onMouseDown={(e) => e.stopPropagation()}><div className="modal-head"><div><span className="eyebrow">{editingContact ? 'EDITAR CADASTRO' : 'NOVO CADASTRO'}</span><h2>{editingContact ? 'Editar contato' : 'Adicionar contato'}</h2></div><button type="button" onClick={() => setContactModal(false)}>×</button></div><div className="form-grid"><label>Nome<input autoFocus value={contactForm.name} onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })} placeholder="Nome completo" /></label><label>E-mail<input type="email" value={contactForm.email} onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })} placeholder="nome@empresa.com" /></label><label>Telefone<input value={contactForm.phone} onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })} placeholder="(00) 00000-0000" /></label><label>Empresa<input value={contactForm.company} onChange={(e) => setContactForm({ ...contactForm, company: e.target.value })} placeholder="Empresa" /></label></div><label>Observações<textarea rows={3} value={contactForm.notes} onChange={(e) => setContactForm({ ...contactForm, notes: e.target.value })} placeholder="Informações úteis sobre o lead" /></label><p className="form-hint">Preencha ao menos nome, e-mail ou telefone.</p><div className="modal-actions"><button type="button" className="secondary" onClick={() => setContactModal(false)}>Cancelar</button><button className="primary">Salvar contato</button></div></form></div>}
-  </main>;
+export default async function Home() {
+  await requireChatGPTUser('/');
+  return <CrmClient />;
 }
