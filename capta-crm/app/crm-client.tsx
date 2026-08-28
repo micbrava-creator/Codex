@@ -8,6 +8,7 @@ import './pipeline.css';
 import './enhancements.css';
 import './polish.css';
 import './team.css';
+import './automation-flow.css';
 
 type ContactList = { id: string; name: string; segment: string; color: string; webhookToken: string; pipelineId: string | null; routingStageId: string | null; assignmentMode: 'manual' | 'fixed' | 'round_robin'; fixedSellerId: string | null; rotationMemberIds: string[]; contactCount: number };
 type Contact = { id: string; listId: string; assignedUserId: string | null; assignedSeller: { id: string; name: string; email: string } | null; name: string; email: string; phone: string; company: string; notes: string; source: string; createdAt: string };
