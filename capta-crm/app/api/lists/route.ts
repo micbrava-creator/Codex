@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '../../../db';
-import { contactLists } from '../../../db/schema';
+import { contactLists, listRotationMembers } from '../../../db/schema';
 import { listContactLists } from '../../../db/queries';
 import { requireApiUser } from '../../chatgpt-auth';
 
-export async function GET() { if (!await requireApiUser()) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 }); return NextResponse.json(await listContactLists()); }
+export async function GET() { if (!await requireApiUser()) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 }); const [lists, rotation] = await Promise.all([listContactLists(), getDb().select().from(listRotationMembers)]); return NextResponse.json(lists.map((list) => ({ ...list, rotationMemberIds: rotation.filter((item) => item.listId === list.id).sort((a, b) => a.position - b.position).map((item) => item.memberId) }))); }
 export async function POST(request: Request) {
   if (!await requireApiUser()) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
   const body = await request.json() as { name?: string; segment?: string; color?: string };
