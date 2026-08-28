@@ -1,5 +1,8 @@
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { eq, sql } from 'drizzle-orm';
+import { getDb } from '../db';
+import { teamMembers } from '../db/schema';
 
 export type ChatGPTUser = { id: string; email: string; name?: string };
 
@@ -21,4 +24,17 @@ export async function requireChatGPTUser(returnTo = '/') {
   return user;
 }
 
-export async function requireApiUser() { return getChatGPTUser(); }
+export type CrmUser = ChatGPTUser & { memberId: string; role: 'manager' | 'sales' | 'admin' };
+
+export async function getCurrentCrmUser(): Promise<CrmUser | null> {
+  const user = await getChatGPTUser(); if (!user) return null;
+  const db = getDb();
+  let [member] = await db.select().from(teamMembers).where(eq(teamMembers.email, user.email.toLowerCase())).limit(1);
+  if (!member) { const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(teamMembers); if (Number(count) === 0) { const record = { id: crypto.randomUUID(), chatgptUserId: user.id, email: user.email.toLowerCase(), name: user.name || user.email.split('@')[0], role: 'manager' as const, active: true, createdAt: new Date() }; await db.insert(teamMembers).values(record); member = record; } }
+  if (!member?.active) return null;
+  if (!member.chatgptUserId) { await db.update(teamMembers).set({ chatgptUserId: user.id }).where(eq(teamMembers.id, member.id)); }
+  return { ...user, memberId: member.id, role: member.role };
+}
+
+export async function requireApiUser() { return getCurrentCrmUser(); }
+export async function requireManager() { const user = await getCurrentCrmUser(); return user?.role === 'manager' ? user : null; }
