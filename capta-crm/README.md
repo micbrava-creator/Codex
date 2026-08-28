@@ -11,8 +11,12 @@ CRM leve para organizar contatos em várias listas e receber leads do Great Page
 - Modelo de CSV disponível diretamente na tela de importação
 - Funis de vendas vinculados às listas, com entrada automática na primeira etapa
 - Kanban com movimentação de cartões por arrastar e soltar
-- Criação, edição e exclusão de funis e etapas
+- Criação, edição e exclusão de funis e etapas, com cores personalizáveis
+- Cartões Kanban em três tamanhos: pequeno, médio e grande
+- Aba de Automação para direcionar cada lista ao funil desejado
+- Direcionamento opcional para um funil já durante a criação da lista
 - Edição completa do cartão do lead e tarefas com prazo e conclusão
+- Interface responsiva para celular, notebook e desktop
 - URL de webhook exclusiva e copiável para cada lista
 - Recebimento de JSON ou formulário (`application/x-www-form-urlencoded` / `multipart/form-data`)
 - Compatibilidade com campos em português e inglês: `nome`/`name`, `email`, `telefone`/`phone`, `whatsapp`, `empresa`/`company`
