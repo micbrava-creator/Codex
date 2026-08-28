@@ -9,7 +9,7 @@ export const pipelineStages = sqliteTable('pipeline_stages', {
 }, (table) => [index('idx_pipeline_stages_pipeline_position').on(table.pipelineId, table.position)]);
 
 export const contactLists = sqliteTable('contact_lists', {
-  id: text('id').primaryKey(), name: text('name').notNull(), segment: text('segment').notNull().default(''), color: text('color').notNull().default('#5B5BD6'), webhookToken: text('webhook_token').notNull(), pipelineId: text('pipeline_id').references(() => pipelines.id, { onDelete: 'set null' }), createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  id: text('id').primaryKey(), name: text('name').notNull(), segment: text('segment').notNull().default(''), color: text('color').notNull().default('#5B5BD6'), webhookToken: text('webhook_token').notNull(), pipelineId: text('pipeline_id').references(() => pipelines.id, { onDelete: 'set null' }), routingStageId: text('routing_stage_id').references(() => pipelineStages.id, { onDelete: 'set null' }), createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 }, (table) => [uniqueIndex('idx_contact_lists_webhook_token').on(table.webhookToken), index('idx_contact_lists_pipeline').on(table.pipelineId)]);
 
 export const contacts = sqliteTable('contacts', {
