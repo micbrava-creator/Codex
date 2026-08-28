@@ -20,6 +20,11 @@ CRM leve para organizar contatos em várias listas e receber leads do Great Page
 - Edição completa do cartão do lead e tarefas com prazo e conclusão
 - Interface responsiva para celular, notebook e desktop
 - Data e horário de entrada visíveis e incluídos na exportação CSV
+- Acesso individual via conta ChatGPT, com perfis de gestor, vendedor e administrativo
+- Gestão de equipe por e-mail e ativação/desativação de acessos
+- Atribuição manual, vendedor fixo ou distribuição alternada por lista
+- Rodízio com reserva atômica para entradas simultâneas
+- Alertas de novos leads por e-mail para o vendedor responsável
 - URL de webhook exclusiva e copiável para cada lista
 - Recebimento de JSON ou formulário (`application/x-www-form-urlencoded` / `multipart/form-data`)
 - Compatibilidade com campos em português e inglês: `nome`/`name`, `email`, `telefone`/`phone`, `whatsapp`, `empresa`/`company`
