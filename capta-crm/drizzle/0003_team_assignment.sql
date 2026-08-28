@@ -1,0 +1,12 @@
+CREATE TABLE `team_members` (`id` text PRIMARY KEY NOT NULL, `chatgpt_user_id` text, `email` text NOT NULL, `name` text DEFAULT '' NOT NULL, `role` text DEFAULT 'sales' NOT NULL, `active` integer DEFAULT true NOT NULL, `created_at` integer NOT NULL);
+CREATE UNIQUE INDEX `idx_team_members_email` ON `team_members` (`email`);
+CREATE UNIQUE INDEX `idx_team_members_chatgpt_user` ON `team_members` (`chatgpt_user_id`);
+CREATE INDEX `idx_team_members_role_active` ON `team_members` (`role`,`active`);
+ALTER TABLE `contact_lists` ADD `assignment_mode` text DEFAULT 'manual' NOT NULL;
+ALTER TABLE `contact_lists` ADD `fixed_seller_id` text REFERENCES team_members(id) ON DELETE set null;
+ALTER TABLE `contact_lists` ADD `rotation_cursor` integer DEFAULT 0 NOT NULL;
+ALTER TABLE `contacts` ADD `assigned_user_id` text REFERENCES team_members(id) ON DELETE set null;
+CREATE INDEX `idx_contacts_assigned_user` ON `contacts` (`assigned_user_id`);
+CREATE TABLE `list_rotation_members` (`list_id` text NOT NULL REFERENCES contact_lists(id) ON DELETE cascade, `member_id` text NOT NULL REFERENCES team_members(id) ON DELETE cascade, `position` integer DEFAULT 0 NOT NULL);
+CREATE UNIQUE INDEX `idx_list_rotation_member` ON `list_rotation_members` (`list_id`,`member_id`);
+CREATE INDEX `idx_list_rotation_position` ON `list_rotation_members` (`list_id`,`position`);
