@@ -1,0 +1,2 @@
+create index if not exists crm_pending_rotation_legacy_member_idx
+on public.crm_pending_rotation_members(legacy_member_id);

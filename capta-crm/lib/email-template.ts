@@ -1,0 +1,3 @@
+export const defaultEmailSettings = { id: 'lead-assigned', subject: 'Novo lead atribuído: {lead}', message: 'Olá, {vendedor}!\n\nVocê recebeu um novo lead da lista {lista}.\n\nLead: {lead}\nE-mail: {email}\nTelefone: {telefone}\nEmpresa: {empresa}\n\nAcesse o Capta CRM para iniciar o atendimento.' };
+export const emailVariables = ['{vendedor}', '{lead}', '{lista}', '{email}', '{telefone}', '{empresa}'];
+export function fillTemplate(template: string, values: Record<string, string>) { return Object.entries(values).reduce((text, [key, value]) => text.replaceAll(`{${key}}`, value || 'Não informado'), template); }

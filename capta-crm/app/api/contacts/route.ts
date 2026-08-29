@@ -1,11 +1,40 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '../../../db';
-import { contactLists, contacts, teamMembers } from '../../../db/schema';
-import { listContacts } from '../../../db/queries';
-import { routeLeadForList } from '../../../db/assignment';
-import { notifySeller } from '../../../lib/lead-email';
-import { eq } from 'drizzle-orm';
+import { createSupabaseServerClient } from '../../../lib/supabase/server';
+import { contactFromDb, routeLeadForList } from '../../../lib/supabase/crm';
 import { requireApiUser } from '../../chatgpt-auth';
+import { notifySeller } from '../../../lib/lead-email';
+import { sendLeadConfirmation } from '../../../lib/lead-confirmation-email';
 
-export async function GET(request: Request) { if (!await requireApiUser()) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 }); const listId = new URL(request.url).searchParams.get('listId'); if (!listId) return NextResponse.json([]); const [items, members] = await Promise.all([listContacts(listId), getDb().select({ id: teamMembers.id, name: teamMembers.name, email: teamMembers.email }).from(teamMembers)]); return NextResponse.json(items.map((contact) => ({ ...contact, assignedSeller: members.find((member) => member.id === contact.assignedUserId) || null }))); }
-export async function POST(request: Request) { const current = await requireApiUser(); if (!current) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 }); const body = await request.json() as Record<string, string>; if (!body.listId || !(body.name?.trim() || body.email?.trim() || body.phone?.trim())) return NextResponse.json({ error: 'Dados insuficientes' }, { status: 400 }); const route = await routeLeadForList(body.listId); let seller = route.seller; if (body.assignedUserId && current.role === 'manager') { const [chosen] = await getDb().select({ id: teamMembers.id, name: teamMembers.name, email: teamMembers.email }).from(teamMembers).where(eq(teamMembers.id, body.assignedUserId)).limit(1); seller = chosen ?? seller; } const now = new Date(); const record = { id: crypto.randomUUID(), listId: body.listId, stageId: route.stageId, assignedUserId: seller?.id ?? null, name: body.name?.trim() ?? '', email: body.email?.trim().toLowerCase() ?? '', phone: body.phone?.trim() ?? '', company: body.company?.trim() ?? '', notes: body.notes?.trim() ?? '', source: 'manual', createdAt: now, updatedAt: now }; await getDb().insert(contacts).values(record); if (seller) { const [list] = await getDb().select({ name: contactLists.name }).from(contactLists).where(eq(contactLists.id, body.listId)).limit(1); await notifySeller({ contactId: record.id, seller, lead: record, listName: list?.name || 'Contatos' }).catch(() => undefined); } return NextResponse.json(record, { status: 201 }); }
+export async function GET(request: Request) {
+  if (!await requireApiUser()) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const listId = new URL(request.url).searchParams.get('listId'); if (!listId) return NextResponse.json([]);
+  const supabase = await createSupabaseServerClient();
+  const [{ data: contacts, error }, { data: profiles }] = await Promise.all([
+    supabase.from('crm_contacts').select('*').eq('list_id', listId).order('created_at', { ascending: false }),
+    supabase.from('crm_profiles').select('id,name,email'),
+  ]);
+  if (error) return NextResponse.json({ error: 'Não foi possível carregar os contatos' }, { status: 500 });
+  return NextResponse.json((contacts || []).map((row) => ({ ...contactFromDb(row), assignedSeller: (profiles || []).find((profile) => profile.id === row.assigned_user_id) || null })));
+}
+
+export async function POST(request: Request) {
+  const current = await requireApiUser(); if (!current) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
+  const body = await request.json() as Record<string, string>;
+  if (!body.listId || !(body.name?.trim() || body.email?.trim() || body.phone?.trim())) return NextResponse.json({ error: 'Dados insuficientes' }, { status: 400 });
+  const route = await routeLeadForList(body.listId); let seller = route.seller;
+  const supabase = await createSupabaseServerClient();
+  if (body.assignedUserId && current.role === 'manager') {
+    const { data } = await supabase.from('crm_profiles').select('id,name,email').eq('id', body.assignedUserId).eq('active', true).maybeSingle();
+    if (data) seller = data;
+  }
+  const record = { id: crypto.randomUUID(), list_id: body.listId, stage_id: route.stageId, assigned_user_id: seller?.id ?? null, negotiation_value_cents: route.negotiationValueCents, name: body.name?.trim() || '', email: body.email?.trim().toLowerCase() || '', phone: body.phone?.trim() || '', company: body.company?.trim() || '', notes: body.notes?.trim() || '', source: 'manual' };
+  const { data, error } = await supabase.from('crm_contacts').insert(record).select().single();
+  if (error) return NextResponse.json({ error: 'Sem permissão ou contato inválido' }, { status: 403 });
+  const { data: list } = await supabase.from('crm_contact_lists').select('name,pipeline_id,email_alerts_enabled,confirmation_email_enabled').eq('id', body.listId).maybeSingle();
+  if (route.stageId && list?.pipeline_id) await supabase.from('crm_contact_stage_history').insert({ id: crypto.randomUUID(), contact_id: record.id, pipeline_id: list.pipeline_id, stage_id: route.stageId });
+  const lead = { name: record.name, email: record.email, phone: record.phone, company: record.company }; const sends: Promise<unknown>[] = [];
+  if (seller && list?.email_alerts_enabled) sends.push(notifySeller({ contactId: record.id, seller, lead, listName: list.name }));
+  if (list?.confirmation_email_enabled && record.email) sends.push(sendLeadConfirmation({ contactId: record.id, lead, listName: list.name }));
+  await Promise.allSettled(sends);
+  return NextResponse.json(contactFromDb(data), { status: 201 });
+}

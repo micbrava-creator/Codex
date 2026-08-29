@@ -25,6 +25,20 @@ CRM leve para organizar contatos em várias listas e receber leads do Great Page
 - Atribuição manual, vendedor fixo ou distribuição alternada por lista
 - Rodízio com reserva atômica para entradas simultâneas
 - Alertas de novos leads por e-mail para o vendedor responsável
+- Aba de E-mails para personalizar assunto e mensagem do alerta, com prévia e informações dinâmicas do lead
+- Nome do vendedor em todos os cartões Kanban e troca manual do responsável na edição do cartão
+- Valor padrão por funil aplicado automaticamente aos novos leads, com edição por negociação
+- Totais financeiros e percentual de distribuição/conversão visíveis em cada etapa do Kanban
+- Conversão de cada etapa calculada em relação à etapa imediatamente anterior para identificar gargalos
+- Troca rápida de etapa diretamente no cartão, além do movimento por arrastar e soltar
+- Venda concluída por cartão, com conversão geral e soma do valor efetivamente vendido
+- Painel do funil com contatos recebidos, potencial total, conversão e faturamento concluído
+- Histórico de passagem por etapas e conversão de cada etapa sobre o total de entradas do funil
+- Dashboard executivo com KPIs gerais, desempenho por vendedor, origens e pipeline financeiro
+- Cadastro manual com escolha explícita da lista de destino e aplicação da respectiva automação
+- Dashboard completo com todos os leads, filtro mensal ou total e ranking dos três melhores e três piores funis
+- Cadastro direto em qualquer etapa do Kanban e ordenação crescente/decrescente dos resultados
+- Quadro comercial com tarefas pendentes e ticket médio individual por vendedor
 - URL de webhook exclusiva e copiável para cada lista
 - Recebimento de JSON ou formulário (`application/x-www-form-urlencoded` / `multipart/form-data`)
 - Compatibilidade com campos em português e inglês: `nome`/`name`, `email`, `telefone`/`phone`, `whatsapp`, `empresa`/`company`
