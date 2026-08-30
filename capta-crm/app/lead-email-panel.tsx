@@ -143,7 +143,7 @@ export default function LeadEmailPanel({
                   <p key={index}>{line || <br />}</p>
                 ))}
             </article>
-            <footer>Responder para micbrava@gmail.com</footer>
+            <footer>Responder para luciana.franca@forttuna.com.br</footer>
           </div>
         </section>
       </div>
