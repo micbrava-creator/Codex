@@ -6,7 +6,6 @@ type Member = {
   email: string;
   role: "manager" | "sales" | "admin";
   active: boolean;
-  chatgptUserId: string | null;
 };
 const roleNames = {
   manager: "Gestor geral",
@@ -45,7 +44,7 @@ export default function TeamPanel({
       );
     setForm({ name: "", email: "", role: "sales" });
     await load();
-    flash("Integrante cadastrado. Ele já pode entrar com essa conta ChatGPT.");
+    flash("Integrante cadastrado. O convite de acesso foi enviado por e-mail.");
   }
   async function update(id: string, values: Partial<Member>) {
     const response = await fetch(`/api/team/${id}`, {
@@ -63,9 +62,7 @@ export default function TeamPanel({
         <div>
           <span className="eyebrow">GESTÃO DE ACESSOS</span>
           <h2>Equipe do Capta</h2>
-          <p>
-            Cadastre o mesmo e-mail usado na conta ChatGPT de cada integrante.
-          </p>
+          <p>Cadastre o e-mail profissional de cada integrante da equipe.</p>
         </div>
         <span>{members.filter((member) => member.active).length} ativos</span>
       </section>
@@ -84,7 +81,7 @@ export default function TeamPanel({
             />
           </label>
           <label>
-            E-mail da conta ChatGPT
+            E-mail de acesso
             <input
               required
               type="email"
@@ -110,8 +107,8 @@ export default function TeamPanel({
           </label>
           <button className="primary">Cadastrar acesso</button>
           <small>
-            O acesso é individual e autenticado pelo ChatGPT. Nenhuma senha fica
-            armazenada no CRM.
+            O acesso é individual e protegido pelo Supabase Auth. As senhas não
+            ficam armazenadas no CRM.
           </small>
         </form>
         <section className="member-list">
@@ -130,11 +127,7 @@ export default function TeamPanel({
               <div>
                 <strong>{member.name}</strong>
                 <small>{member.email}</small>
-                <em>
-                  {member.chatgptUserId
-                    ? "Conta conectada"
-                    : "Aguardando primeiro acesso"}
-                </em>
+                <em>{member.active ? "Acesso ativo" : "Acesso desativado"}</em>
               </div>
               <select
                 value={member.role}
