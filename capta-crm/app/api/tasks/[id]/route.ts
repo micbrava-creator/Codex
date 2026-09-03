@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '../../../../lib/supabase/server';
 import { requireApiUser } from '../../../chatgpt-auth';
-import { nextBusinessFollowUp } from '../../../../lib/follow-up';
+import { nextFollowUpMinutes } from '../../../../lib/follow-up';
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   if (!await requireApiUser()) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
@@ -17,8 +17,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { error } = await supabase.from('crm_card_tasks').update(values).eq('id', id);
   if (error) return NextResponse.json({ error: 'Não foi possível alterar' }, { status: 403 });
   if (body.completed === true && before?.kind === 'follow_up' && !before.completed) {
-    const { data: contact } = await supabase.from('crm_contacts').select('name,follow_up_enabled,follow_up_interval_days').eq('id', before.contact_id).maybeSingle();
-    if (contact?.follow_up_enabled) await supabase.from('crm_card_tasks').insert({ id: crypto.randomUUID(), contact_id: before.contact_id, kind: 'follow_up', title: `Entrar em contato com ${contact.name || 'o lead'}`, due_date: nextBusinessFollowUp(contact.follow_up_interval_days), reminder_enabled: true });
+    const { data: contact } = await supabase.from('crm_contacts').select('name,follow_up_enabled,follow_up_interval_minutes,next_follow_up_title,next_follow_up_notes').eq('id', before.contact_id).maybeSingle();
+    if (contact?.follow_up_enabled) await supabase.from('crm_card_tasks').insert({ id: crypto.randomUUID(), contact_id: before.contact_id, kind: 'follow_up', title: (contact.next_follow_up_title || 'Retomar contato com {{lead}}').replaceAll('{{lead}}', contact.name || 'o lead'), notes: contact.next_follow_up_notes || '', due_date: nextFollowUpMinutes(contact.follow_up_interval_minutes || 2880), reminder_enabled: true });
   }
   return NextResponse.json({ ok: true });
 }

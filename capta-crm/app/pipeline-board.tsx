@@ -28,6 +28,7 @@ type Card = {
   tasks: Task[];
   followUpEnabled: boolean;
   followUpIntervalDays: number;
+  followUpIntervalMinutes: number;
 };
 type Stage = {
   id: string;
@@ -63,6 +64,7 @@ function whatsappUrl(phone: string) {
     digits.length === 10 || digits.length === 11 ? `55${digits}` : digits;
   return `https://wa.me/${international}`;
 }
+function localDateTime(value: string | null) { if (!value) return ""; const date = new Date(value); date.setMinutes(date.getMinutes() - date.getTimezoneOffset()); return date.toISOString().slice(0, 16); }
 
 export default function PipelineBoard({
   lists,
@@ -441,16 +443,24 @@ export default function PipelineBoard({
   }
   async function configureFollowUp(enabled: boolean) {
     if (!card) return;
-    const intervalDays = card.followUpIntervalDays || 2;
+    const intervalMinutes = card.followUpIntervalMinutes || (card.followUpIntervalDays || 2) * 1440;
     const pending = card.tasks.find((task) => task.kind === "follow_up" && !task.completed);
-    const nextAt = pending?.dueDate || new Date(Date.now() + intervalDays * 86400000).toISOString();
-    const response = await fetch(`/api/contacts/${card.id}/follow-up`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled, intervalDays, nextAt, title: pending?.title, notes: pending?.notes, reminderEnabled: pending?.reminderEnabled ?? true }) });
+    const nextAt = pending?.dueDate || new Date(Date.now() + intervalMinutes * 60000).toISOString();
+    const response = await fetch(`/api/contacts/${card.id}/follow-up`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled, intervalMinutes, nextAt, title: pending?.title, notes: pending?.notes, reminderEnabled: pending?.reminderEnabled ?? true }) });
     if (!response.ok) return flash("Não foi possível alterar o follow-up.");
     await load();
     const refreshed = await fetch("/api/pipelines").then((item) => item.json()) as Pipeline[];
     const updated = refreshed.flatMap((pipeline) => pipeline.stages).flatMap((stage) => stage.cards).find((item) => item.id === card.id);
     if (updated) setCard(updated);
     flash(enabled ? "Follow-up automático ativado." : "Follow-up automático desativado.");
+  }
+  async function rescheduleFollowUp(value: string) {
+    if (!card) return; const pending = card.tasks.find((task) => task.kind === "follow_up" && !task.completed);
+    const iso = new Date(value).toISOString();
+    setCard((current) => current ? { ...current, tasks: current.tasks.map((task) => task.id === pending?.id ? { ...task, dueDate: iso, reminderEnabled: true } : task) } : null);
+    if (pending) await fetch(`/api/tasks/${pending.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dueDate: value, reminderEnabled: true }) });
+    else await fetch(`/api/contacts/${card.id}/follow-up`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: true, intervalMinutes: card.followUpIntervalMinutes || 2880, nextAt: value, reminderEnabled: true }) });
+    await load(); const refreshed = await fetch("/api/pipelines").then((item) => item.json()) as Pipeline[]; const updated = refreshed.flatMap((pipeline) => pipeline.stages).flatMap((stage) => stage.cards).find((item) => item.id === card.id); if (updated) setCard(updated); flash("Data e horário do follow-up atualizados.");
   }
   async function toggleTask(task: Task) {
     await fetch(`/api/tasks/${task.id}`, {
@@ -1206,8 +1216,9 @@ export default function PipelineBoard({
               <div className="follow-up-control">
                 <div><span className="eyebrow">FOLLOW-UP AUTOMÁTICO</span><strong>{card.followUpEnabled ? "Acompanhamento ativo" : "Acompanhamento pausado"}</strong><small>Ao concluir um follow-up, o próximo é programado automaticamente.</small></div>
                 <label className="follow-up-switch"><input type="checkbox" checked={card.followUpEnabled} onChange={(event) => configureFollowUp(event.target.checked)} /><span /></label>
-                <label>Intervalo<select value={card.followUpIntervalDays} onChange={(event) => setCard({ ...card, followUpIntervalDays: Number(event.target.value) })}>{[1,2,3,5,7,14,30].map((days) => <option key={days} value={days}>{days} {days === 1 ? "dia útil" : "dias úteis"}</option>)}</select></label>
+                <label>Intervalo em minutos<input type="number" min="1" max="525600" value={card.followUpIntervalMinutes || 2880} onChange={(event) => setCard({ ...card, followUpIntervalMinutes: Number(event.target.value) })} /></label>
                 {card.followUpEnabled && <button className="secondary small" onClick={() => configureFollowUp(true)}>Salvar intervalo</button>}
+                <label className="follow-up-date">Próximo contato<input type="datetime-local" value={localDateTime(card.tasks.find((task) => task.kind === "follow_up" && !task.completed)?.dueDate || null)} onChange={(event) => rescheduleFollowUp(event.target.value)} /></label>
               </div>
               <div className="tasks-title">
                 <span className="eyebrow">TAREFAS</span>
