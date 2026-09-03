@@ -1,23 +1,570 @@
-'use client';
-import { useCallback, useEffect, useState } from 'react';
-type Stage = { id: string; name: string }; type Pipeline = { id: string; name: string; stages: Stage[] }; type Member = { id: string; name: string; email: string; role: string; active: boolean };
-type ContactList = { id: string; name: string; segment: string; color: string; pipelineId: string | null; routingStageId: string | null; assignmentMode: 'manual' | 'fixed' | 'round_robin'; fixedSellerId: string | null; rotationMemberIds: string[]; emailAlertsEnabled: boolean; confirmationEmailEnabled: boolean; followUpEnabled: boolean; firstFollowUpDelayMinutes: number; followUpIntervalMinutes: number; followUpTitle: string; followUpNotes: string; nextFollowUpTitle: string; nextFollowUpNotes: string; contactCount: number };
-export default function AutomationPanel({ lists, reloadLists, flash, openPipelines }: { lists: ContactList[]; reloadLists: () => Promise<void>; flash: (message: string) => void; openPipelines: () => void }) {
-  const [pipelines, setPipelines] = useState<Pipeline[]>([]); const [members, setMembers] = useState<Member[]>([]); const [saving, setSaving] = useState(''); const [rotationDraft, setRotationDraft] = useState<Record<string, string[]>>({});
-  const load = useCallback(async () => { const [p, m] = await Promise.all([fetch('/api/pipelines'), fetch('/api/team')]); setPipelines(await p.json() as Pipeline[]); setMembers(await m.json() as Member[]); }, []);
-  useEffect(() => { load(); }, [load]); useEffect(() => { setRotationDraft(Object.fromEntries(lists.map((list) => [list.id, list.rotationMemberIds || []]))); }, [lists]);
-  const sellers = members.filter((member) => member.role === 'sales' && member.active);
-  async function save(listId: string, values: Record<string, unknown>) { setSaving(listId); const response = await fetch(`/api/lists/${listId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(values) }); await reloadLists(); setSaving(''); flash(response.ok ? 'Automação salva com sucesso.' : 'Não foi possível salvar a automação.'); }
-  function toggleSeller(listId: string, memberId: string) { setRotationDraft((current) => { const selected = current[listId] || []; return { ...current, [listId]: selected.includes(memberId) ? selected.filter((id) => id !== memberId) : [...selected, memberId] }; }); }
-  return <div className="automation-screen"><section className="automation-hero"><div className="automation-icon">↗</div><div><span className="eyebrow">AUTOMAÇÃO DE ENTRADA</span><h2>Destino, responsável e alerta do lead</h2><p>Configure o funil, a etapa, o vendedor e se ele deve receber o alerta por e-mail.</p></div><button className="secondary" onClick={openPipelines}>Gerenciar funis</button></section><section className="automation-flow-grid">{lists.map((list) => {
-    const pipeline = pipelines.find((item) => item.id === list.pipelineId); const stages = pipeline?.stages || []; const fixedSeller = sellers.find((seller) => seller.id === list.fixedSellerId); const selectedCount = (rotationDraft[list.id] || []).length;
-    return <article className="automation-flow-card" key={list.id}><header><i style={{ background: list.color }} /><div><strong>{list.name}</strong><small>{list.segment || 'Sem segmento'} · {list.contactCount} contatos</small></div><span className={list.pipelineId ? 'flow-status active' : 'flow-status'}>{list.pipelineId ? 'Ativa' : 'Incompleta'}</span></header>
-      <div className="flow-line"><span>1</span><label>Funil de destino<select value={list.pipelineId || ''} disabled={saving === list.id} onChange={(event) => { const pipelineId = event.target.value || null; save(list.id, { pipelineId, routingStageId: pipelines.find((item) => item.id === pipelineId)?.stages[0]?.id || null }); }}><option value="">Escolha o funil</option>{pipelines.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label></div>
-      <div className="flow-line"><span>2</span><label>Etapa de entrada<select value={list.routingStageId || stages[0]?.id || ''} disabled={!pipeline || saving === list.id} onChange={(event) => save(list.id, { routingStageId: event.target.value || null })}><option value="">Escolha a etapa</option>{stages.map((stage) => <option value={stage.id} key={stage.id}>{stage.name}</option>)}</select></label></div>
-      <div className="flow-line seller-flow"><span>3</span><div><strong>Atribuir vendedor</strong><div className="assignment-modes"><button className={list.assignmentMode === 'manual' ? 'active' : ''} onClick={() => save(list.id, { assignmentMode: 'manual', fixedSellerId: null })}>Manual</button><button className={list.assignmentMode === 'fixed' ? 'active' : ''} onClick={() => save(list.id, { assignmentMode: 'fixed', fixedSellerId: list.fixedSellerId || sellers[0]?.id || null })}>Vendedor fixo</button><button className={list.assignmentMode === 'round_robin' ? 'active' : ''} onClick={() => save(list.id, { assignmentMode: 'round_robin', fixedSellerId: null })}>Alternadamente</button></div>{list.assignmentMode === 'manual' && <p className="assignment-help">O gestor escolhe o responsável no cadastro ou edição do lead.</p>}{list.assignmentMode === 'fixed' && <label className="seller-select">Vendedor responsável<select value={list.fixedSellerId || ''} onChange={(event) => save(list.id, { fixedSellerId: event.target.value || null })}><option value="">Escolha um vendedor</option>{sellers.map((seller) => <option value={seller.id} key={seller.id}>{seller.name} · {seller.email}</option>)}</select></label>}{list.assignmentMode === 'round_robin' && <div className="rotation-members"><span>Marque os vendedores que participam</span>{sellers.map((seller) => <label key={seller.id} className={(rotationDraft[list.id] || []).includes(seller.id) ? 'selected' : ''}><input type="checkbox" checked={(rotationDraft[list.id] || []).includes(seller.id)} onChange={() => toggleSeller(list.id, seller.id)} /><i>{seller.name.slice(0, 1).toUpperCase()}</i><span>{seller.name}<small>{seller.email}</small></span></label>)}{!sellers.length && <p>Cadastre integrantes com perfil Vendedor na aba Equipe.</p>}<button className="save-rotation" disabled={saving === list.id || !selectedCount} onClick={() => save(list.id, { assignmentMode: 'round_robin', fixedSellerId: null, rotationMemberIds: rotationDraft[list.id] || [] })}>{saving === list.id ? 'Salvando…' : `Salvar rodízio · ${selectedCount} selecionados`}</button></div>}</div></div>
-      <div className="flow-line email-alert-flow"><span>4</span><div><strong>Alerta por e-mail</strong><p>{list.emailAlertsEnabled ? 'O vendedor atribuído receberá o alerta de cada novo contato.' : 'Novos contatos serão cadastrados sem envio de e-mail.'}</p></div><button type="button" role="switch" aria-checked={list.emailAlertsEnabled} className={list.emailAlertsEnabled ? 'email-alert-switch active' : 'email-alert-switch'} disabled={saving === list.id} onClick={() => save(list.id, { emailAlertsEnabled: !list.emailAlertsEnabled })}><i /><b>{list.emailAlertsEnabled ? 'Ativado' : 'Desativado'}</b></button></div>
-      <div className="flow-line email-alert-flow confirmation-flow"><span>5</span><div><strong>Confirmação para o lead</strong><p>{list.confirmationEmailEnabled ? 'O contato receberá uma confirmação automática após o cadastro.' : 'Nenhuma confirmação será enviada ao contato.'}</p></div><button type="button" role="switch" aria-checked={list.confirmationEmailEnabled} className={list.confirmationEmailEnabled ? 'email-alert-switch active' : 'email-alert-switch'} disabled={saving === list.id} onClick={() => save(list.id, { confirmationEmailEnabled: !list.confirmationEmailEnabled })}><i /><b>{list.confirmationEmailEnabled ? 'Ativado' : 'Desativado'}</b></button></div>
-      <div className="flow-line follow-up-flow"><span>6</span><div className="follow-up-settings"><div className="follow-up-heading"><div><strong>Follow-up desta lista</strong><p>{list.followUpEnabled ? 'Todo novo lead atribuído receberá a cadência abaixo.' : 'Nenhum follow-up será criado automaticamente nesta lista.'}</p></div><button type="button" role="switch" aria-checked={list.followUpEnabled} className={list.followUpEnabled ? 'email-alert-switch active' : 'email-alert-switch'} disabled={saving === list.id} onClick={() => save(list.id, { followUpEnabled: !list.followUpEnabled })}><i /><b>{list.followUpEnabled ? 'Ativado' : 'Desativado'}</b></button></div>{list.followUpEnabled && <><div className="follow-up-times"><label>Primeira chamada após<input type="number" min="1" max="43200" defaultValue={list.firstFollowUpDelayMinutes} onBlur={(event) => save(list.id, { firstFollowUpDelayMinutes: Number(event.target.value) })} /><small>minutos</small></label><label>Próximos follow-ups a cada<input type="number" min="1" max="525600" defaultValue={list.followUpIntervalMinutes} onBlur={(event) => save(list.id, { followUpIntervalMinutes: Number(event.target.value) })} /><small>minutos · 1 dia = 1440</small></label></div><label>Texto do acompanhamento<input defaultValue={list.followUpTitle} maxLength={240} onBlur={(event) => save(list.id, { followUpTitle: event.target.value })} placeholder="Entrar em contato com {{lead}}" /></label><label>Orientação para o vendedor<textarea defaultValue={list.followUpNotes} maxLength={2000} rows={2} onBlur={(event) => save(list.id, { followUpNotes: event.target.value })} placeholder="Ex.: confirmar interesse e registrar o retorno" /></label><label>Próximos acompanhamentos<input defaultValue={list.nextFollowUpTitle} maxLength={240} onBlur={(event) => save(list.id, { nextFollowUpTitle: event.target.value })} placeholder="Retomar contato com {{lead}}" /></label><label>Orientação dos próximos contatos<textarea defaultValue={list.nextFollowUpNotes} maxLength={2000} rows={2} onBlur={(event) => save(list.id, { nextFollowUpNotes: event.target.value })} placeholder="Ex.: revisar resposta anterior e combinar o próximo passo" /></label><div className="follow-up-presets"><span>Primeira chamada rápida:</span>{[15,30,60].map((minutes) => <button key={minutes} type="button" onClick={() => save(list.id, { firstFollowUpDelayMinutes: minutes })}>{minutes} min</button>)}</div></>}</div></div>
-      <footer><span>Destino atual</span><strong>{pipeline?.name || 'Sem funil'} <b>→</b> {stages.find((stage) => stage.id === list.routingStageId)?.name || stages[0]?.name || 'Sem etapa'} <b>→</b> {list.assignmentMode === 'fixed' ? fixedSeller?.name || 'Escolher vendedor' : list.assignmentMode === 'round_robin' ? `${selectedCount} vendedores em rodízio` : 'Atribuição manual'} <b>→</b> Follow-up {list.followUpEnabled ? `em ${list.firstFollowUpDelayMinutes} min` : 'desativado'}</strong></footer></article>;
-  })}{!lists.length && <div className="routing-empty"><h3>Nenhuma lista criada</h3><p>Crie uma lista na aba Contatos para configurar a automação.</p></div>}</section><div className="automation-note"><span>i</span><p>A preferência de alerta vale para Great Pages, cadastro manual e importação CSV. O direcionamento e a atribuição continuam funcionando mesmo com o e-mail desativado.</p></div></div>;
+"use client";
+import { useCallback, useEffect, useState } from "react";
+type Stage = { id: string; name: string };
+type Pipeline = { id: string; name: string; stages: Stage[] };
+type Member = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  active: boolean;
+};
+type ContactList = {
+  id: string;
+  name: string;
+  segment: string;
+  color: string;
+  pipelineId: string | null;
+  routingStageId: string | null;
+  assignmentMode: "manual" | "fixed" | "round_robin";
+  fixedSellerId: string | null;
+  rotationMemberIds: string[];
+  emailAlertsEnabled: boolean;
+  confirmationEmailEnabled: boolean;
+  followUpEnabled: boolean;
+  firstFollowUpDelayMinutes: number;
+  followUpIntervalMinutes: number;
+  followUpTitle: string;
+  followUpNotes: string;
+  nextFollowUpTitle: string;
+  nextFollowUpNotes: string;
+  contactCount: number;
+};
+export default function AutomationPanel({
+  lists,
+  reloadLists,
+  flash,
+  openPipelines,
+}: {
+  lists: ContactList[];
+  reloadLists: () => Promise<void>;
+  flash: (message: string) => void;
+  openPipelines: () => void;
+}) {
+  const [pipelines, setPipelines] = useState<Pipeline[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [saving, setSaving] = useState("");
+  const [rotationDraft, setRotationDraft] = useState<Record<string, string[]>>(
+    {},
+  );
+  const load = useCallback(async () => {
+    const [p, m] = await Promise.all([
+      fetch("/api/pipelines"),
+      fetch("/api/team"),
+    ]);
+    setPipelines((await p.json()) as Pipeline[]);
+    setMembers((await m.json()) as Member[]);
+  }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
+  useEffect(() => {
+    setRotationDraft(
+      Object.fromEntries(
+        lists.map((list) => [list.id, list.rotationMemberIds || []]),
+      ),
+    );
+  }, [lists]);
+  const sellers = members.filter(
+    (member) => member.role === "sales" && member.active,
+  );
+  async function save(listId: string, values: Record<string, unknown>) {
+    setSaving(listId);
+    const response = await fetch(`/api/lists/${listId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(values),
+    });
+    await reloadLists();
+    setSaving("");
+    flash(
+      response.ok
+        ? "Automação salva com sucesso."
+        : "Não foi possível salvar a automação.",
+    );
+  }
+  function toggleSeller(listId: string, memberId: string) {
+    setRotationDraft((current) => {
+      const selected = current[listId] || [];
+      return {
+        ...current,
+        [listId]: selected.includes(memberId)
+          ? selected.filter((id) => id !== memberId)
+          : [...selected, memberId],
+      };
+    });
+  }
+  return (
+    <div className="automation-screen">
+      <section className="automation-hero">
+        <div className="automation-icon">↗</div>
+        <div>
+          <span className="eyebrow">AUTOMAÇÃO DE ENTRADA</span>
+          <h2>Destino, responsável e alerta do lead</h2>
+          <p>
+            Configure o funil, a etapa, o vendedor e se ele deve receber o
+            alerta por e-mail.
+          </p>
+        </div>
+        <button className="secondary" onClick={openPipelines}>
+          Gerenciar funis
+        </button>
+      </section>
+      <section className="automation-flow-grid">
+        {lists.map((list) => {
+          const pipeline = pipelines.find(
+            (item) => item.id === list.pipelineId,
+          );
+          const stages = pipeline?.stages || [];
+          const fixedSeller = sellers.find(
+            (seller) => seller.id === list.fixedSellerId,
+          );
+          const selectedCount = (rotationDraft[list.id] || []).length;
+          return (
+            <article className="automation-flow-card" key={list.id}>
+              <header>
+                <i style={{ background: list.color }} />
+                <div>
+                  <strong>{list.name}</strong>
+                  <small>
+                    {list.segment || "Sem segmento"} · {list.contactCount}{" "}
+                    contatos
+                  </small>
+                </div>
+                <span
+                  className={
+                    list.pipelineId ? "flow-status active" : "flow-status"
+                  }
+                >
+                  {list.pipelineId ? "Ativa" : "Incompleta"}
+                </span>
+              </header>
+              <div className="flow-line">
+                <span>1</span>
+                <label>
+                  Funil de destino
+                  <select
+                    value={list.pipelineId || ""}
+                    disabled={saving === list.id}
+                    onChange={(event) => {
+                      const pipelineId = event.target.value || null;
+                      save(list.id, {
+                        pipelineId,
+                        routingStageId:
+                          pipelines.find((item) => item.id === pipelineId)
+                            ?.stages[0]?.id || null,
+                      });
+                    }}
+                  >
+                    <option value="">Escolha o funil</option>
+                    {pipelines.map((item) => (
+                      <option value={item.id} key={item.id}>
+                        {item.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="flow-line">
+                <span>2</span>
+                <label>
+                  Etapa de entrada
+                  <select
+                    value={list.routingStageId || stages[0]?.id || ""}
+                    disabled={!pipeline || saving === list.id}
+                    onChange={(event) =>
+                      save(list.id, {
+                        routingStageId: event.target.value || null,
+                      })
+                    }
+                  >
+                    <option value="">Escolha a etapa</option>
+                    {stages.map((stage) => (
+                      <option value={stage.id} key={stage.id}>
+                        {stage.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="flow-line seller-flow">
+                <span>3</span>
+                <div>
+                  <strong>Atribuir vendedor</strong>
+                  <div className="assignment-modes">
+                    <button
+                      className={
+                        list.assignmentMode === "manual" ? "active" : ""
+                      }
+                      onClick={() =>
+                        save(list.id, {
+                          assignmentMode: "manual",
+                          fixedSellerId: null,
+                        })
+                      }
+                    >
+                      Manual
+                    </button>
+                    <button
+                      className={
+                        list.assignmentMode === "fixed" ? "active" : ""
+                      }
+                      onClick={() =>
+                        save(list.id, {
+                          assignmentMode: "fixed",
+                          fixedSellerId:
+                            list.fixedSellerId || sellers[0]?.id || null,
+                        })
+                      }
+                    >
+                      Vendedor fixo
+                    </button>
+                    <button
+                      className={
+                        list.assignmentMode === "round_robin" ? "active" : ""
+                      }
+                      onClick={() =>
+                        save(list.id, {
+                          assignmentMode: "round_robin",
+                          fixedSellerId: null,
+                        })
+                      }
+                    >
+                      Alternadamente
+                    </button>
+                  </div>
+                  {list.assignmentMode === "manual" && (
+                    <p className="assignment-help">
+                      O gestor escolhe o responsável no cadastro ou edição do
+                      lead.
+                    </p>
+                  )}
+                  {list.assignmentMode === "fixed" && (
+                    <label className="seller-select">
+                      Vendedor responsável
+                      <select
+                        value={list.fixedSellerId || ""}
+                        onChange={(event) =>
+                          save(list.id, {
+                            fixedSellerId: event.target.value || null,
+                          })
+                        }
+                      >
+                        <option value="">Escolha um vendedor</option>
+                        {sellers.map((seller) => (
+                          <option value={seller.id} key={seller.id}>
+                            {seller.name} · {seller.email}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  {list.assignmentMode === "round_robin" && (
+                    <div className="rotation-members">
+                      <span>Marque os vendedores que participam</span>
+                      {sellers.map((seller) => (
+                        <label
+                          key={seller.id}
+                          className={
+                            (rotationDraft[list.id] || []).includes(seller.id)
+                              ? "selected"
+                              : ""
+                          }
+                        >
+                          <input
+                            type="checkbox"
+                            checked={(rotationDraft[list.id] || []).includes(
+                              seller.id,
+                            )}
+                            onChange={() => toggleSeller(list.id, seller.id)}
+                          />
+                          <i>{seller.name.slice(0, 1).toUpperCase()}</i>
+                          <span>
+                            {seller.name}
+                            <small>{seller.email}</small>
+                          </span>
+                        </label>
+                      ))}
+                      {!sellers.length && (
+                        <p>
+                          Cadastre integrantes com perfil Vendedor na aba
+                          Equipe.
+                        </p>
+                      )}
+                      <button
+                        className="save-rotation"
+                        disabled={saving === list.id || !selectedCount}
+                        onClick={() =>
+                          save(list.id, {
+                            assignmentMode: "round_robin",
+                            fixedSellerId: null,
+                            rotationMemberIds: rotationDraft[list.id] || [],
+                          })
+                        }
+                      >
+                        {saving === list.id
+                          ? "Salvando…"
+                          : `Salvar rodízio · ${selectedCount} selecionados`}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="flow-line email-alert-flow">
+                <span>4</span>
+                <div>
+                  <strong>Alerta por e-mail</strong>
+                  <p>
+                    {list.emailAlertsEnabled
+                      ? "O vendedor atribuído receberá o alerta de cada novo contato."
+                      : "Novos contatos serão cadastrados sem envio de e-mail."}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={list.emailAlertsEnabled}
+                  className={
+                    list.emailAlertsEnabled
+                      ? "email-alert-switch active"
+                      : "email-alert-switch"
+                  }
+                  disabled={saving === list.id}
+                  onClick={() =>
+                    save(list.id, {
+                      emailAlertsEnabled: !list.emailAlertsEnabled,
+                    })
+                  }
+                >
+                  <i />
+                  <b>{list.emailAlertsEnabled ? "Ativado" : "Desativado"}</b>
+                </button>
+              </div>
+              <div className="flow-line email-alert-flow confirmation-flow">
+                <span>5</span>
+                <div>
+                  <strong>Confirmação para o lead</strong>
+                  <p>
+                    {list.confirmationEmailEnabled
+                      ? "O contato receberá uma confirmação automática após o cadastro."
+                      : "Nenhuma confirmação será enviada ao contato."}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={list.confirmationEmailEnabled}
+                  className={
+                    list.confirmationEmailEnabled
+                      ? "email-alert-switch active"
+                      : "email-alert-switch"
+                  }
+                  disabled={saving === list.id}
+                  onClick={() =>
+                    save(list.id, {
+                      confirmationEmailEnabled: !list.confirmationEmailEnabled,
+                    })
+                  }
+                >
+                  <i />
+                  <b>
+                    {list.confirmationEmailEnabled ? "Ativado" : "Desativado"}
+                  </b>
+                </button>
+              </div>
+              <div className="flow-line follow-up-flow">
+                <span>6</span>
+                <div className="follow-up-settings">
+                  <div className="follow-up-heading">
+                    <div>
+                      <strong>Follow-up desta lista</strong>
+                      <p>
+                        {list.followUpEnabled
+                          ? "Todo novo lead atribuído receberá a cadência abaixo."
+                          : "Nenhum follow-up será criado automaticamente nesta lista."}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={list.followUpEnabled}
+                      className={
+                        list.followUpEnabled
+                          ? "email-alert-switch active"
+                          : "email-alert-switch"
+                      }
+                      disabled={saving === list.id}
+                      onClick={() =>
+                        save(list.id, {
+                          followUpEnabled: !list.followUpEnabled,
+                        })
+                      }
+                    >
+                      <i />
+                      <b>{list.followUpEnabled ? "Ativado" : "Desativado"}</b>
+                    </button>
+                  </div>
+                  {list.followUpEnabled && (
+                    <>
+                      <div className="follow-up-times">
+                        <label>
+                          Primeira chamada após
+                      <input
+                        key={`${list.id}-first-${list.firstFollowUpDelayMinutes}`}
+                        type="number"
+                            min="1"
+                            max="43200"
+                            defaultValue={list.firstFollowUpDelayMinutes}
+                            onBlur={(event) =>
+                              save(list.id, {
+                                firstFollowUpDelayMinutes: Number(
+                                  event.target.value,
+                                ),
+                              })
+                            }
+                          />
+                          <small>minutos</small>
+                        </label>
+                        <label>
+                          Próximos follow-ups a cada
+                      <input
+                        key={`${list.id}-interval-${list.followUpIntervalMinutes}`}
+                        type="number"
+                        min="1"
+                        max="365"
+                        step="1"
+                        defaultValue={Math.max(
+                          1,
+                          Math.round(list.followUpIntervalMinutes / 1440),
+                        )}
+                        onBlur={(event) =>
+                          save(list.id, {
+                            followUpIntervalMinutes:
+                              Number(event.target.value) * 1440,
+                          })
+                        }
+                      />
+                      <small>dias</small>
+                        </label>
+                      </div>
+                      <label>
+                        Texto do acompanhamento
+                        <input
+                          defaultValue={list.followUpTitle}
+                          maxLength={240}
+                          onBlur={(event) =>
+                            save(list.id, { followUpTitle: event.target.value })
+                          }
+                          placeholder="Entrar em contato com {{lead}}"
+                        />
+                      </label>
+                      <label>
+                        Orientação para o vendedor
+                        <textarea
+                          defaultValue={list.followUpNotes}
+                          maxLength={2000}
+                          rows={2}
+                          onBlur={(event) =>
+                            save(list.id, { followUpNotes: event.target.value })
+                          }
+                          placeholder="Ex.: confirmar interesse e registrar o retorno"
+                        />
+                      </label>
+                      <label>
+                        Próximos acompanhamentos
+                        <input
+                          defaultValue={list.nextFollowUpTitle}
+                          maxLength={240}
+                          onBlur={(event) =>
+                            save(list.id, {
+                              nextFollowUpTitle: event.target.value,
+                            })
+                          }
+                          placeholder="Retomar contato com {{lead}}"
+                        />
+                      </label>
+                      <label>
+                        Orientação dos próximos contatos
+                        <textarea
+                          defaultValue={list.nextFollowUpNotes}
+                          maxLength={2000}
+                          rows={2}
+                          onBlur={(event) =>
+                            save(list.id, {
+                              nextFollowUpNotes: event.target.value,
+                            })
+                          }
+                          placeholder="Ex.: revisar resposta anterior e combinar o próximo passo"
+                        />
+                      </label>
+                      <div className="follow-up-presets">
+                        <span>Primeira chamada rápida:</span>
+                        {[15, 30, 60].map((minutes) => (
+                      <button
+                        key={minutes}
+                        type="button"
+                        aria-pressed={
+                          list.firstFollowUpDelayMinutes === minutes
+                        }
+                        className={
+                          list.firstFollowUpDelayMinutes === minutes
+                            ? 'active'
+                            : ''
+                        }
+                        disabled={saving === list.id}
+                        onPointerDown={(event) => event.preventDefault()}
+                        onClick={() =>
+                          save(list.id, {
+                                firstFollowUpDelayMinutes: minutes,
+                              })
+                            }
+                          >
+                            {minutes} min
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+              <footer>
+                <span>Destino atual</span>
+                <strong>
+                  {pipeline?.name || "Sem funil"} <b>→</b>{" "}
+                  {stages.find((stage) => stage.id === list.routingStageId)
+                    ?.name ||
+                    stages[0]?.name ||
+                    "Sem etapa"}{" "}
+                  <b>→</b>{" "}
+                  {list.assignmentMode === "fixed"
+                    ? fixedSeller?.name || "Escolher vendedor"
+                    : list.assignmentMode === "round_robin"
+                      ? `${selectedCount} vendedores em rodízio`
+                      : "Atribuição manual"}{" "}
+                  <b>→</b> Follow-up{" "}
+                  {list.followUpEnabled
+                    ? `em ${list.firstFollowUpDelayMinutes} min`
+                    : "desativado"}
+                </strong>
+              </footer>
+            </article>
+          );
+        })}
+        {!lists.length && (
+          <div className="routing-empty">
+            <h3>Nenhuma lista criada</h3>
+            <p>Crie uma lista na aba Contatos para configurar a automação.</p>
+          </div>
+        )}
+      </section>
+      <div className="automation-note">
+        <span>i</span>
+        <p>
+          A preferência de alerta vale para Great Pages, cadastro manual e
+          importação CSV. O direcionamento e a atribuição continuam funcionando
+          mesmo com o e-mail desativado.
+        </p>
+      </div>
+    </div>
+  );
 }
