@@ -33,7 +33,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     negotiation_value_cents: pipeline.default_value_cents ?? source.negotiation_value_cents ?? 0,
     sale_completed: false, sale_completed_at: null,
     name: source.name, email: source.email, phone: source.phone, company: source.company,
-    notes: source.notes, source: 'duplicate', follow_up_enabled: source.follow_up_enabled,
+    notes: source.notes, source: source.source, follow_up_enabled: source.follow_up_enabled,
     follow_up_interval_days: source.follow_up_interval_days,
     follow_up_interval_minutes: source.follow_up_interval_minutes,
     next_follow_up_title: source.next_follow_up_title,
