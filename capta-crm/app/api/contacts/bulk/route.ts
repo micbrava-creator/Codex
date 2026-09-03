@@ -4,6 +4,7 @@ import { routeLeadForList } from '../../../../lib/supabase/crm';
 import { requireApiUser } from '../../../chatgpt-auth';
 import { notifySeller } from '../../../../lib/lead-email';
 import { sendLeadConfirmation } from '../../../../lib/lead-confirmation-email';
+import { createAutomaticFollowUp } from '../../../../lib/follow-up';
 type IncomingContact = { name?: string; email?: string; phone?: string; company?: string; notes?: string };
 
 export async function POST(request: Request) {
@@ -28,6 +29,7 @@ export async function POST(request: Request) {
     const history = records.filter((record) => record.stage_id).map((record) => ({ id: crypto.randomUUID(), contact_id: record.id, pipeline_id: list.pipeline_id, stage_id: record.stage_id }));
     if (history.length) await supabase.from('crm_contact_stage_history').insert(history);
   }
+  await Promise.all(records.map((record) => createAutomaticFollowUp({ contactId: String(record.id), sellerId: typeof record.assigned_user_id === 'string' ? record.assigned_user_id : null, leadName: String(record.name || '') })));
   const sends: Promise<unknown>[] = [];
   if (list?.email_alerts_enabled) sends.push(...notifications.map((item) => notifySeller({ contactId: item.contactId, seller: item.seller, lead: { name: item.lead.name || '', email: item.lead.email || '', phone: item.lead.phone || '', company: item.lead.company || '' }, listName: list.name })));
   if (list?.confirmation_email_enabled) sends.push(...records.filter((record) => record.email).map((record) => sendLeadConfirmation({ contactId: String(record.id), lead: { name: String(record.name || ''), email: String(record.email || ''), phone: String(record.phone || ''), company: String(record.company || '') }, listName: list.name })));

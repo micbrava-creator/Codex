@@ -4,6 +4,7 @@ import { createSupabaseAdminClient } from '../../../../lib/supabase/admin';
 import { routeLeadForList } from '../../../../lib/supabase/crm';
 import { notifySeller } from '../../../../lib/lead-email';
 import { sendLeadConfirmation } from '../../../../lib/lead-confirmation-email';
+import { createAutomaticFollowUp } from '../../../../lib/follow-up';
 
 function value(body: Record<string, unknown>, names: string[]) {
   for (const name of names) { const found = body[name]; if (typeof found === 'string') return found.trim(); }
@@ -49,6 +50,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     const { error } = await admin.from('crm_contacts').insert(record);
     if (error) throw error;
     if (route.stageId && list.pipeline_id) await admin.from('crm_contact_stage_history').insert({ id: crypto.randomUUID(), contact_id: record.id, pipeline_id: list.pipeline_id, stage_id: route.stageId });
+    await createAutomaticFollowUp({ contactId: record.id, sellerId: route.seller?.id, leadName: name });
     await admin.from('crm_webhook_events').update({ status: 'completed', contact_id: record.id, completed_at: new Date().toISOString() }).eq('id', eventId);
     const sends: Promise<unknown>[] = [];
     const lead = { name, email, phone, company };

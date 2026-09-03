@@ -4,6 +4,7 @@ import { contactFromDb, routeLeadForList } from '../../../lib/supabase/crm';
 import { requireApiUser } from '../../chatgpt-auth';
 import { notifySeller } from '../../../lib/lead-email';
 import { sendLeadConfirmation } from '../../../lib/lead-confirmation-email';
+import { createAutomaticFollowUp } from '../../../lib/follow-up';
 
 export async function GET(request: Request) {
   if (!await requireApiUser()) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
@@ -32,6 +33,7 @@ export async function POST(request: Request) {
   if (error) return NextResponse.json({ error: 'Sem permissão ou contato inválido' }, { status: 403 });
   const { data: list } = await supabase.from('crm_contact_lists').select('name,pipeline_id,email_alerts_enabled,confirmation_email_enabled').eq('id', body.listId).maybeSingle();
   if (route.stageId && list?.pipeline_id) await supabase.from('crm_contact_stage_history').insert({ id: crypto.randomUUID(), contact_id: record.id, pipeline_id: list.pipeline_id, stage_id: route.stageId });
+  await createAutomaticFollowUp({ contactId: record.id, sellerId: seller?.id, leadName: record.name });
   const lead = { name: record.name, email: record.email, phone: record.phone, company: record.company }; const sends: Promise<unknown>[] = [];
   if (seller && list?.email_alerts_enabled) sends.push(notifySeller({ contactId: record.id, seller, lead, listName: list.name }));
   if (list?.confirmation_email_enabled && record.email) sends.push(sendLeadConfirmation({ contactId: record.id, lead, listName: list.name }));

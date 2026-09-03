@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '../../../../lib/supabase/server';
 import { requireApiUser } from '../../../chatgpt-auth';
 import { notifySeller } from '../../../../lib/lead-email';
+import { createAutomaticFollowUp } from '../../../../lib/follow-up';
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const current = await requireApiUser(); if (!current) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 });
@@ -27,6 +28,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       supabase.from('crm_contact_lists').select('name,email_alerts_enabled').eq('id', before.list_id).maybeSingle(),
     ]);
     if (seller && list?.email_alerts_enabled) await notifySeller({ contactId: id, seller, lead: { name: String(values.name ?? before.name), email: String(values.email ?? before.email), phone: String(values.phone ?? before.phone), company: String(values.company ?? before.company) }, listName: list.name }).catch(() => undefined);
+    if (seller) await createAutomaticFollowUp({ contactId: id, sellerId: seller.id, leadName: String(values.name ?? before.name) });
   }
   return NextResponse.json({ ok: true });
 }

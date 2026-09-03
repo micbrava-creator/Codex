@@ -7,6 +7,9 @@ type Task = {
   title: string;
   dueDate: string | null;
   completed: boolean;
+  kind: "task" | "follow_up";
+  notes: string;
+  reminderEnabled: boolean;
 };
 type Card = {
   id: string;
@@ -23,6 +26,8 @@ type Card = {
   notes: string;
   source: string;
   tasks: Task[];
+  followUpEnabled: boolean;
+  followUpIntervalDays: number;
 };
 type Stage = {
   id: string;
@@ -74,6 +79,7 @@ export default function PipelineBoard({
   const [card, setCard] = useState<Card | null>(null);
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDate, setTaskDateState] = useState("");
+  const [taskKind, setTaskKind] = useState<"task" | "follow_up">("follow_up");
   function setTaskDate(value: string | Record<string, string>) {
     setTaskDateState(
       typeof value === "string" ? value : Object.values(value).join(""),
@@ -418,6 +424,8 @@ export default function PipelineBoard({
         contactId: card.id,
         title: taskTitle,
         dueDate: taskDate,
+        kind: taskKind,
+        reminderEnabled: taskKind === "follow_up",
       }),
     });
     setTaskTitle("");
@@ -430,6 +438,19 @@ export default function PipelineBoard({
       .flatMap((stage) => stage.cards)
       .find((item) => item.id === card.id);
     if (updated) setCard(updated);
+  }
+  async function configureFollowUp(enabled: boolean) {
+    if (!card) return;
+    const intervalDays = card.followUpIntervalDays || 2;
+    const pending = card.tasks.find((task) => task.kind === "follow_up" && !task.completed);
+    const nextAt = pending?.dueDate || new Date(Date.now() + intervalDays * 86400000).toISOString();
+    const response = await fetch(`/api/contacts/${card.id}/follow-up`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled, intervalDays, nextAt, title: pending?.title, notes: pending?.notes, reminderEnabled: pending?.reminderEnabled ?? true }) });
+    if (!response.ok) return flash("Não foi possível alterar o follow-up.");
+    await load();
+    const refreshed = await fetch("/api/pipelines").then((item) => item.json()) as Pipeline[];
+    const updated = refreshed.flatMap((pipeline) => pipeline.stages).flatMap((stage) => stage.cards).find((item) => item.id === card.id);
+    if (updated) setCard(updated);
+    flash(enabled ? "Follow-up automático ativado." : "Follow-up automático desativado.");
   }
   async function toggleTask(task: Task) {
     await fetch(`/api/tasks/${task.id}`, {
@@ -784,6 +805,7 @@ export default function PipelineBoard({
                             "Sem vendedor atribuído"}
                         </span>
                       </div>
+                      <div className={item.followUpEnabled ? "follow-up-chip active" : "follow-up-chip"}>◷ {item.followUpEnabled ? "Follow-up ativo" : "Follow-up desativado"}</div>
                       <footer>
                         <span>
                           ☑{" "}
@@ -1181,6 +1203,12 @@ export default function PipelineBoard({
               <button className="primary save-card">Salvar alterações</button>
             </form>
             <section className="tasks-panel">
+              <div className="follow-up-control">
+                <div><span className="eyebrow">FOLLOW-UP AUTOMÁTICO</span><strong>{card.followUpEnabled ? "Acompanhamento ativo" : "Acompanhamento pausado"}</strong><small>Ao concluir um follow-up, o próximo é programado automaticamente.</small></div>
+                <label className="follow-up-switch"><input type="checkbox" checked={card.followUpEnabled} onChange={(event) => configureFollowUp(event.target.checked)} /><span /></label>
+                <label>Intervalo<select value={card.followUpIntervalDays} onChange={(event) => setCard({ ...card, followUpIntervalDays: Number(event.target.value) })}>{[1,2,3,5,7,14,30].map((days) => <option key={days} value={days}>{days} {days === 1 ? "dia útil" : "dias úteis"}</option>)}</select></label>
+                {card.followUpEnabled && <button className="secondary small" onClick={() => configureFollowUp(true)}>Salvar intervalo</button>}
+              </div>
               <div className="tasks-title">
                 <span className="eyebrow">TAREFAS</span>
                 <strong>
@@ -1201,8 +1229,9 @@ export default function PipelineBoard({
                       {task.title}
                       <small>
                         {task.dueDate
-                          ? new Date(task.dueDate).toLocaleDateString("pt-BR")
+                          ? new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(task.dueDate))
                           : "Sem prazo"}
+                        {task.kind === "follow_up" ? ` · Follow-up${task.reminderEnabled ? " · alerta por e-mail" : ""}` : ""}
                       </small>
                     </span>
                     <button onClick={() => deleteTask(task.id)}>×</button>
@@ -1210,13 +1239,14 @@ export default function PipelineBoard({
                 ))}
               </div>
               <form className="add-task" onSubmit={addTask}>
+                <select value={taskKind} onChange={(event) => setTaskKind(event.target.value as "task" | "follow_up")}><option value="follow_up">Follow-up com alerta</option><option value="task">Tarefa comum</option></select>
                 <input
                   value={taskTitle}
                   onChange={(event) => setTaskTitle(event.target.value)}
                   placeholder="Nova tarefa…"
                 />
                 <input
-                  type="date"
+                  type="datetime-local"
                   value={taskDate}
                   onChange={(event) => setTaskDate(event.target.value)}
                 />
