@@ -92,6 +92,7 @@ export default function PipelineBoard({
   );
   const [defaultValueInput, setDefaultValueInput] = useState("0,00");
   const [cardValueInput, setCardValueInput] = useState("0,00");
+  const [copyTarget, setCopyTarget] = useState<{ pipelineId: string; stageId: string } | null>(null);
   const [stageContact, setStageContact] = useState<{
     stageId: string;
     listId: string;
@@ -416,6 +417,19 @@ export default function PipelineBoard({
     await load();
     flash(saleCompleted ? "Venda marcada como concluída." : "Venda reaberta.");
   }
+  async function duplicateCard(targetPipelineId: string, targetStageId?: string) {
+    if (!card) return;
+    const response = await fetch(`/api/contacts/${card.id}/duplicate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ targetPipelineId, targetStageId }),
+    });
+    if (!response.ok) return flash("Não foi possível duplicar o cartão.");
+    setCopyTarget(null);
+    setCard(null);
+    await load();
+    flash(targetPipelineId === selected?.id ? "Cartão duplicado no funil." : "Cópia enviada para o outro funil.");
+  }
   async function addTask(event: FormEvent) {
     event.preventDefault();
     if (!card || !taskTitle.trim()) return;
@@ -443,7 +457,7 @@ export default function PipelineBoard({
   }
   async function configureFollowUp(enabled: boolean) {
     if (!card) return;
-    const intervalMinutes = card.followUpIntervalMinutes || (card.followUpIntervalDays || 2) * 1440;
+    const intervalMinutes = (card.followUpIntervalDays || Math.max(1, Math.round((card.followUpIntervalMinutes || 2880) / 1440))) * 1440;
     const pending = card.tasks.find((task) => task.kind === "follow_up" && !task.completed);
     const nextAt = pending?.dueDate || new Date(Date.now() + intervalMinutes * 60000).toISOString();
     const response = await fetch(`/api/contacts/${card.id}/follow-up`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled, intervalMinutes, nextAt, title: pending?.title, notes: pending?.notes, reminderEnabled: pending?.reminderEnabled ?? true }) });
@@ -1216,9 +1230,14 @@ export default function PipelineBoard({
               <div className="follow-up-control">
                 <div><span className="eyebrow">FOLLOW-UP AUTOMÁTICO</span><strong>{card.followUpEnabled ? "Acompanhamento ativo" : "Acompanhamento pausado"}</strong><small>Ao concluir um follow-up, o próximo é programado automaticamente.</small></div>
                 <label className="follow-up-switch"><input type="checkbox" checked={card.followUpEnabled} onChange={(event) => configureFollowUp(event.target.checked)} /><span /></label>
-                <label>Intervalo em minutos<input type="number" min="1" max="525600" value={card.followUpIntervalMinutes || 2880} onChange={(event) => setCard({ ...card, followUpIntervalMinutes: Number(event.target.value) })} /></label>
+                <label>Intervalo em dias<input type="number" min="1" max="365" step="1" value={card.followUpIntervalDays || Math.max(1, Math.round((card.followUpIntervalMinutes || 2880) / 1440))} onChange={(event) => setCard({ ...card, followUpIntervalDays: Number(event.target.value), followUpIntervalMinutes: Number(event.target.value) * 1440 })} /></label>
                 {card.followUpEnabled && <button className="secondary small" onClick={() => configureFollowUp(true)}>Salvar intervalo</button>}
                 <label className="follow-up-date">Próximo contato<input type="datetime-local" value={localDateTime(card.tasks.find((task) => task.kind === "follow_up" && !task.completed)?.dueDate || null)} onChange={(event) => rescheduleFollowUp(event.target.value)} /></label>
+              </div>
+              <div className="card-copy-actions">
+                <div><span className="eyebrow">OUTRAS OPORTUNIDADES</span><small>Crie outra negociação para este mesmo lead sem alterar o cartão atual.</small></div>
+                <button type="button" className="secondary" onClick={() => selected && duplicateCard(selected.id, card.stageId)}>Duplicar nesta etapa</button>
+                <button type="button" className="secondary" onClick={() => { const target = pipelines.find((pipeline) => pipeline.id !== selected?.id); setCopyTarget(target ? { pipelineId: target.id, stageId: target.stages[0]?.id || "" } : { pipelineId: "", stageId: "" }); }}>Enviar cópia para outro funil</button>
               </div>
               <div className="tasks-title">
                 <span className="eyebrow">TAREFAS</span>
@@ -1264,6 +1283,17 @@ export default function PipelineBoard({
                 <button className="secondary">Adicionar</button>
               </form>
             </section>
+          </section>
+        </div>
+      )}
+      {card && copyTarget && (
+        <div className="modal-backdrop nested-modal" onMouseDown={() => setCopyTarget(null)}>
+          <section className="modal copy-card-modal" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="modal-head"><div><span className="eyebrow">NOVA OPORTUNIDADE</span><h2>Enviar cópia para outro funil</h2></div><button type="button" onClick={() => setCopyTarget(null)}>×</button></div>
+            <p className="copy-card-help">O cartão original será preservado. A cópia começa como uma nova negociação, com o valor padrão do funil escolhido.</p>
+            <label>Funil de destino<select className="form-select" value={copyTarget.pipelineId} onChange={(event) => { const pipeline = pipelines.find((item) => item.id === event.target.value); setCopyTarget({ pipelineId: event.target.value, stageId: pipeline?.stages[0]?.id || "" }); }}><option value="">Escolha o funil</option>{pipelines.filter((pipeline) => pipeline.id !== selected?.id).map((pipeline) => <option key={pipeline.id} value={pipeline.id}>{pipeline.name}</option>)}</select></label>
+            <label>Etapa inicial<select className="form-select" value={copyTarget.stageId} disabled={!copyTarget.pipelineId} onChange={(event) => setCopyTarget({ ...copyTarget, stageId: event.target.value })}><option value="">Escolha a etapa</option>{pipelines.find((pipeline) => pipeline.id === copyTarget.pipelineId)?.stages.map((stage) => <option key={stage.id} value={stage.id}>{stage.name}</option>)}</select></label>
+            <div className="modal-actions"><button type="button" className="secondary" onClick={() => setCopyTarget(null)}>Cancelar</button><button type="button" className="primary" disabled={!copyTarget.pipelineId || !copyTarget.stageId} onClick={() => duplicateCard(copyTarget.pipelineId, copyTarget.stageId)}>Criar oportunidade</button></div>
           </section>
         </div>
       )}
