@@ -11,7 +11,7 @@ export async function GET() {
     supabase.from('crm_products').select('id,name,category,price_cents,color,active'),
   ]);
   if (error) return NextResponse.json({ error: 'Não foi possível carregar as esteiras' }, { status: 500 });
-  return NextResponse.json((tracks || []).map((track) => ({ id: track.id, name: track.name, description: track.description, active: track.active, items: (items || []).filter((item) => item.track_id === track.id).map((item) => { const entry = products?.find((product) => product.id === item.product_id); return { productId: item.product_id, position: item.position, product: entry ? { id: entry.id, name: entry.name, category: entry.category, priceCents: entry.price_cents, color: entry.color, active: entry.active } : null }; }).filter((item) => item.product) })));
+  return NextResponse.json((tracks || []).map((track) => ({ id: track.id, name: track.name, description: track.description, active: track.active, nextTrackId: track.next_track_id ?? null, nextTrackName: (tracks || []).find((item) => item.id === track.next_track_id)?.name || '', items: (items || []).filter((item) => item.track_id === track.id).map((item) => { const entry = products?.find((product) => product.id === item.product_id); return { productId: item.product_id, position: item.position, product: entry ? { id: entry.id, name: entry.name, category: entry.category, priceCents: entry.price_cents, color: entry.color, active: entry.active } : null }; }).filter((item) => item.product) })));
 }
 
 export async function POST(request: Request) {
