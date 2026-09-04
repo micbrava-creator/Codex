@@ -11,9 +11,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!body.targetPipelineId) return NextResponse.json({ error: 'Funil de destino obrigatório' }, { status: 400 });
 
   const supabase = createSupabaseAdminClient();
-  const [{ data: source }, { data: pipeline }] = await Promise.all([
+  const [{ data: source }, { data: pipeline }, { data: linkedProducts }] = await Promise.all([
     supabase.from('crm_contacts').select('*').eq('id', id).maybeSingle(),
     supabase.from('crm_pipelines').select('id,default_value_cents').eq('id', body.targetPipelineId).maybeSingle(),
+    supabase.from('crm_products').select('id').eq('pipeline_id', body.targetPipelineId).eq('active', true).order('created_at').limit(1),
   ]);
   if (!source) return NextResponse.json({ error: 'Cartão não encontrado' }, { status: 404 });
   if (current.role === 'sales' && source.assigned_user_id !== current.id) {
@@ -29,6 +30,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const duplicate = {
     id: crypto.randomUUID(), list_id: source.list_id, stage_id: stage.id,
+    product_id: linkedProducts?.[0]?.id ?? null,
     assigned_user_id: source.assigned_user_id,
     negotiation_value_cents: pipeline.default_value_cents ?? source.negotiation_value_cents ?? 0,
     sale_completed: false, sale_completed_at: null,

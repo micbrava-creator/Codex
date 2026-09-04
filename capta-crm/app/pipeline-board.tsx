@@ -13,6 +13,7 @@ type Task = {
 };
 type Card = {
   id: string;
+  productId: string | null;
   stageId: string;
   assignedUserId: string | null;
   assignedSeller: { id: string; name: string; email: string } | null;
@@ -47,6 +48,7 @@ type Pipeline = {
   lists: { id: string; name: string; pipelineId: string | null }[];
 };
 type ContactList = { id: string; name: string; pipelineId: string | null };
+type Product = { id: string; name: string; pipelineId: string | null; active: boolean };
 const money = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",
@@ -97,6 +99,7 @@ export default function PipelineBoard({
     stageId: string;
     listId: string;
     assignedUserId: string;
+    productId: string;
     name: string;
     email: string;
     phone: string;
@@ -114,6 +117,7 @@ export default function PipelineBoard({
   >([]);
   const [sellerFilter, setSellerFilter] = useState("all");
   const [currentRole, setCurrentRole] = useState("");
+  const [products, setProducts] = useState<Product[]>([]);
   const selected =
     pipelines.find((pipeline) => pipeline.id === selectedId) ?? pipelines[0];
   const load = useCallback(async () => {
@@ -146,13 +150,15 @@ export default function PipelineBoard({
         (response) =>
           response.json() as Promise<{ role: string; memberId: string }>,
       ),
-    ]).then(([team, me]) => {
+      fetch("/api/products").then((response) => response.json() as Promise<Product[]>),
+    ]).then(([team, me, productData]) => {
       const available = team.filter(
         (member) => member.role === "sales" && member.active,
       );
       setSellers(available);
       setCurrentRole(me.role || "");
       if (me.role === "sales") setSellerFilter(me.memberId);
+      setProducts(Array.isArray(productData) ? productData.filter((product) => product.active) : []);
     });
   }, [load]);
   useEffect(() => {
@@ -208,6 +214,7 @@ export default function PipelineBoard({
       stageId: selected.stages[0]?.id || "",
       listId: available[0]?.id || "",
       assignedUserId: "",
+      productId: products.find((product) => product.pipelineId === selected.id)?.id || "",
       name: "",
       email: "",
       phone: "",
@@ -242,6 +249,7 @@ export default function PipelineBoard({
           company: stageContact.company,
           notes: stageContact.notes,
           assignedUserId: stageContact.assignedUserId || null,
+          productId: stageContact.productId || null,
           negotiationValueCents: parseMoney(stageContact.negotiationValue),
         }),
       }),
@@ -400,6 +408,7 @@ export default function PipelineBoard({
         company: card.company,
         notes: card.notes,
         assignedUserId: card.assignedUserId,
+        productId: card.productId,
         negotiationValueCents: parseMoney(cardValueInput),
       }),
     });
@@ -1083,6 +1092,20 @@ export default function PipelineBoard({
                 </select>
               </label>
               <label>
+                Produto desta oportunidade
+                <select
+                  className="form-select"
+                  value={stageContact.productId}
+                  onChange={(event) => setStageContact({ ...stageContact, productId: event.target.value })}
+                >
+                  <option value="">Sem produto vinculado</option>
+                  {products
+                    .filter((product) => !product.pipelineId || product.pipelineId === selected?.id)
+                    .map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
+                </select>
+                <small>Ao concluir a venda, este produto entra automaticamente na jornada do cliente.</small>
+              </label>
+              <label>
                 Valor da negociação (R$)
                 <input
                   inputMode="decimal"
@@ -1223,6 +1246,20 @@ export default function PipelineBoard({
                     setCard({ ...card, notes: event.target.value })
                   }
                 />
+              </label>
+              <label>
+                Produto desta oportunidade
+                <select
+                  className="form-select"
+                  value={card.productId || ""}
+                  onChange={(event) => setCard({ ...card, productId: event.target.value || null })}
+                >
+                  <option value="">Sem produto vinculado</option>
+                  {products
+                    .filter((product) => !product.pipelineId || product.pipelineId === selected?.id)
+                    .map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
+                </select>
+                <small>Ao concluir a venda, este produto entra automaticamente na jornada do cliente.</small>
               </label>
               <button className="primary save-card">Salvar alterações</button>
             </form>

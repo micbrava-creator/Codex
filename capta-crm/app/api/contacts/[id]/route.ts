@@ -18,6 +18,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (body.notes !== undefined) values.notes = typeof body.notes === 'string' ? body.notes.trim() : '';
   if (body.negotiationValueCents !== undefined) values.negotiation_value_cents = Math.max(0, Math.round(Number(body.negotiationValueCents) || 0));
   if (body.stageId !== undefined) values.stage_id = typeof body.stageId === 'string' ? body.stageId || null : null;
+  if (body.productId !== undefined) values.product_id = typeof body.productId === 'string' ? body.productId || null : null;
   if (body.assignedUserId !== undefined && current.role === 'manager') values.assigned_user_id = typeof body.assignedUserId === 'string' ? body.assignedUserId || null : null;
   const { error } = await supabase.from('crm_contacts').update(values).eq('id', id);
   if (error) return NextResponse.json({ error: 'Sem permissão para alterar o contato' }, { status: 403 });

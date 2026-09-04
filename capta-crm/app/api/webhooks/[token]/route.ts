@@ -46,7 +46,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
 
   try {
     const route = await routeLeadForList(list.id);
-    const record = { id: crypto.randomUUID(), list_id: list.id, stage_id: route.stageId, assigned_user_id: route.seller?.id ?? null, negotiation_value_cents: route.negotiationValueCents, name, email, phone, company, notes: value(body, ['notes', 'observacoes', 'mensagem']), source: 'webhook' };
+    let productId: string | null = null;
+    if (list.pipeline_id) {
+      const { data: products } = await admin.from('crm_products').select('id').eq('pipeline_id', list.pipeline_id).eq('active', true).order('created_at').limit(1);
+      productId = products?.[0]?.id ?? null;
+    }
+    const record = { id: crypto.randomUUID(), list_id: list.id, stage_id: route.stageId, product_id: productId, assigned_user_id: route.seller?.id ?? null, negotiation_value_cents: route.negotiationValueCents, name, email, phone, company, notes: value(body, ['notes', 'observacoes', 'mensagem']), source: 'webhook' };
     const { error } = await admin.from('crm_contacts').insert(record);
     if (error) throw error;
     if (route.stageId && list.pipeline_id) await admin.from('crm_contact_stage_history').insert({ id: crypto.randomUUID(), contact_id: record.id, pipeline_id: list.pipeline_id, stage_id: route.stageId });

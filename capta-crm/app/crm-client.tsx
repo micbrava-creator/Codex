@@ -16,6 +16,9 @@ import EmailPanel from "./email-panel";
 import LeadEmailPanel from "./lead-email-panel";
 import DashboardPanel from "./dashboard-panel";
 import AgendaPanel from "./agenda-panel";
+import ProductsPanel from "./products-panel";
+import ProductTracksPanel from "./product-tracks-panel";
+import CustomerJourneyPanel from "./customer-journey-panel";
 import { logout } from "./login/actions";
 import "./pipeline.css";
 import "./enhancements.css";
@@ -34,6 +37,7 @@ import "./aesthetic-refresh.css";
 import "./agenda.css";
 import "./follow-up.css";
 import "./follow-up-per-list.css";
+import "./commerce.css";
 
 type ContactList = {
   id: string;
@@ -174,6 +178,9 @@ export default function Home() {
     | "team"
     | "email"
     | "lead-email"
+    | "products"
+    | "product-tracks"
+    | "journey"
   >("contacts");
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [pipelineOptions, setPipelineOptions] = useState<PipelineOption[]>([]);
@@ -454,6 +461,24 @@ export default function Home() {
         ◷ <span>Minha agenda</span>
       </button>
       <button
+        className={view === "products" ? "active" : ""}
+        onClick={() => setView("products")}
+      >
+        ◈ <span>Produtos</span>
+      </button>
+      <button
+        className={view === "product-tracks" ? "active" : ""}
+        onClick={() => setView("product-tracks")}
+      >
+        ⇢ <span>Esteira de produtos</span>
+      </button>
+      <button
+        className={view === "journey" ? "active" : ""}
+        onClick={() => setView("journey")}
+      >
+        ♢ <span>Jornada do cliente</span>
+      </button>
+      <button
         className={view === "team" ? "active" : ""}
         onClick={() => setView("team")}
       >
@@ -622,6 +647,51 @@ export default function Home() {
             ✓ {notice}
           </div>
         )}
+      </main>
+    );
+  if (view === "products")
+    return (
+      <main className="app-shell">
+        <aside className="sidebar">
+          <div className="brand"><span className="brand-mark">C</span><div><strong>Capta</strong><small>CRM de contatos</small></div></div>
+          {sideNav}
+          <div className="sidebar-foot"><span className="status-dot" /> Catálogo comercial</div>
+        </aside>
+        <section className="workspace">
+          <header className="topbar"><div><p>PORTFÓLIO</p><h1>Produtos</h1></div></header>
+          <ProductsPanel flash={flash} />
+        </section>
+        {notice && <div className="toast" role="status">✓ {notice}</div>}
+      </main>
+    );
+  if (view === "product-tracks")
+    return (
+      <main className="app-shell">
+        <aside className="sidebar">
+          <div className="brand"><span className="brand-mark">C</span><div><strong>Capta</strong><small>CRM de contatos</small></div></div>
+          {sideNav}
+          <div className="sidebar-foot"><span className="status-dot" /> Sequência comercial</div>
+        </aside>
+        <section className="workspace">
+          <header className="topbar"><div><p>PORTFÓLIO</p><h1>Esteira de produtos</h1></div></header>
+          <ProductTracksPanel flash={flash} />
+        </section>
+        {notice && <div className="toast" role="status">✓ {notice}</div>}
+      </main>
+    );
+  if (view === "journey")
+    return (
+      <main className="app-shell">
+        <aside className="sidebar">
+          <div className="brand"><span className="brand-mark">C</span><div><strong>Capta</strong><small>CRM de contatos</small></div></div>
+          {sideNav}
+          <div className="sidebar-foot"><span className="status-dot" /> Oportunidades organizadas</div>
+        </aside>
+        <section className="workspace">
+          <header className="topbar"><div><p>RELACIONAMENTO</p><h1>Jornada do cliente</h1></div></header>
+          <CustomerJourneyPanel flash={flash} openPipelines={() => setView("pipelines")} />
+        </section>
+        {notice && <div className="toast" role="status">✓ {notice}</div>}
       </main>
     );
   if (view === "team")

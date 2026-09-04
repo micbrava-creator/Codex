@@ -28,7 +28,15 @@ export async function POST(request: Request) {
     const { data } = await supabase.from('crm_profiles').select('id,name,email').eq('id', body.assignedUserId).eq('active', true).maybeSingle();
     if (data) seller = data;
   }
-  const record = { id: crypto.randomUUID(), list_id: body.listId, stage_id: route.stageId, assigned_user_id: seller?.id ?? null, negotiation_value_cents: route.negotiationValueCents, name: body.name?.trim() || '', email: body.email?.trim().toLowerCase() || '', phone: body.phone?.trim() || '', company: body.company?.trim() || '', notes: body.notes?.trim() || '', source: 'manual' };
+  let productId = body.productId || null;
+  if (!productId && route.stageId) {
+    const { data: stage } = await supabase.from('crm_pipeline_stages').select('pipeline_id').eq('id', route.stageId).maybeSingle();
+    if (stage?.pipeline_id) {
+      const { data: products } = await supabase.from('crm_products').select('id').eq('pipeline_id', stage.pipeline_id).eq('active', true).order('created_at').limit(1);
+      productId = products?.[0]?.id ?? null;
+    }
+  }
+  const record = { id: crypto.randomUUID(), list_id: body.listId, stage_id: route.stageId, product_id: productId, assigned_user_id: seller?.id ?? null, negotiation_value_cents: route.negotiationValueCents, name: body.name?.trim() || '', email: body.email?.trim().toLowerCase() || '', phone: body.phone?.trim() || '', company: body.company?.trim() || '', notes: body.notes?.trim() || '', source: 'manual' };
   const { data, error } = await supabase.from('crm_contacts').insert(record).select().single();
   if (error) return NextResponse.json({ error: 'Sem permissão ou contato inválido' }, { status: 403 });
   const { data: list } = await supabase.from('crm_contact_lists').select('name,pipeline_id,email_alerts_enabled,confirmation_email_enabled').eq('id', body.listId).maybeSingle();
